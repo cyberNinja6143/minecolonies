@@ -3,7 +3,7 @@ package com.minecolonies.core.entity.pathfinding.pathjobs;
 import com.ldtteam.structurize.util.BlockUtils;
 import com.minecolonies.api.colony.buildings.IBuilding;
 import com.minecolonies.api.util.BlockPosUtil;
-import com.minecolonies.core.colony.managers.RaidManager;
+import com.minecolonies.core.colony.events.raid.RaidManager;
 import com.minecolonies.core.entity.pathfinding.MNode;
 import com.minecolonies.core.entity.pathfinding.PathingOptions;
 import com.minecolonies.core.entity.pathfinding.SurfaceType;
@@ -18,7 +18,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
-import static com.minecolonies.core.entity.pathfinding.navigation.PathingStuckHandler.HORIZONTAL_DIRS;
+import static com.minecolonies.api.util.BlockPosUtil.HORIZONTAL_DIRS;
 
 /**
  * Special raider pathfinding, can go through blocks and place ladders, is finished when reaching close to the intended spawn and is a legit spawn point.
@@ -156,7 +156,7 @@ public class PathJobRaiderPathing extends AbstractPathJob
       final int x,
       final int y,
       final int z,
-      final BlockState state)
+      final BlockState state, final BlockState below)
     {
         double modifier = addCost;
         addCost = 1.0;

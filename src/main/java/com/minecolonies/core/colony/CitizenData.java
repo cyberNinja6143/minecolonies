@@ -56,8 +56,7 @@ import java.lang.ref.WeakReference;
 import java.util.*;
 
 import static com.minecolonies.api.entity.citizen.AbstractEntityCitizen.*;
-import static com.minecolonies.api.research.util.ResearchConstants.HEALTH_BOOST;
-import static com.minecolonies.api.research.util.ResearchConstants.WALKING;
+import static com.minecolonies.api.research.util.ResearchConstants.*;
 import static com.minecolonies.api.util.ItemStackUtils.CAN_EAT;
 import static com.minecolonies.api.util.constant.BuildingConstants.TAG_ACTIVE;
 import static com.minecolonies.api.util.constant.CitizenConstants.*;
@@ -65,6 +64,8 @@ import static com.minecolonies.api.util.constant.ColonyConstants.UPDATE_SUBSCRIB
 import static com.minecolonies.api.util.constant.Constants.TAG_STRING;
 import static com.minecolonies.api.util.constant.Constants.TICKS_SECOND;
 import static com.minecolonies.api.util.constant.NbtTagConstants.*;
+import static com.minecolonies.api.util.constant.NbtTagConstants.TAG_ID;
+import static com.minecolonies.api.util.constant.NbtTagConstants.TAG_NAME;
 import static com.minecolonies.api.util.constant.TranslationConstants.*;
 
 /**
@@ -308,7 +309,7 @@ public class CitizenData implements ICitizenData
     /**
      * The sound profile index.
      */
-    private int soundProfile;
+    private int voiceProfile;
 
     /**
      * Recent interaction timer
@@ -319,6 +320,11 @@ public class CitizenData implements ICitizenData
      * Recent interaction timer
      */
     private Set<UUID> interactedRecentlyPlayers = new HashSet<>();
+
+    /**
+     * Texture UUID.
+     */
+    private UUID textureUUID;
 
     /**
      * Create a CitizenData given an ID. Used as a super-constructor or during loading.
@@ -367,9 +373,15 @@ public class CitizenData implements ICitizenData
     }
 
     @Override
-    public int getSoundProfile()
+    public int getVoiceProfile()
     {
-        return soundProfile;
+        return voiceProfile;
+    }
+
+    @Override
+    public void setVoiceProfile(final int profile)
+    {
+        this.voiceProfile = profile;
     }
 
     @Override
@@ -479,7 +491,7 @@ public class CitizenData implements ICitizenData
         //Assign the gender before name
         female = random.nextBoolean();
         textureSuffix = SUFFIXES.get(random.nextInt(SUFFIXES.size()));
-        soundProfile = random.nextInt(NUM_SOUND_PROFILES);
+        voiceProfile = random.nextInt(NUM_SOUND_PROFILES);
         paused = false;
         name = generateName(random, female, getColony(), getColony().getCitizenNameFile());
         textureId = random.nextInt(255);
@@ -1032,6 +1044,16 @@ public class CitizenData implements ICitizenData
         {
             buf.writeResourceLocation(av);
         }
+
+        if (textureUUID == null)
+        {
+            buf.writeBoolean(false);
+        }
+        else
+        {
+            buf.writeBoolean(true);
+            buf.writeUUID(textureUUID);
+        }
     }
 
     @Override
@@ -1187,7 +1209,7 @@ public class CitizenData implements ICitizenData
         nbtTagCompound.putInt(TAG_ID, id);
         nbtTagCompound.putString(TAG_NAME, name);
         nbtTagCompound.putString(TAG_SUFFIX, textureSuffix);
-        nbtTagCompound.putInt(TAG_SOUND_PROFILE, soundProfile);
+        nbtTagCompound.putInt(TAG_SOUND_PROFILE, voiceProfile);
 
         nbtTagCompound.putBoolean(TAG_FEMALE, female);
         nbtTagCompound.putBoolean(TAG_PAUSED, paused);
@@ -1279,6 +1301,10 @@ public class CitizenData implements ICitizenData
         }
         nbtTagCompound.put(TAG_FINISHED_PART_QUESTS, finishedPartQuestNBT);
 
+        if (textureUUID != null)
+        {
+            nbtTagCompound.putUUID(TAG_TEXTURE_UUID, textureUUID);
+        }
 
         return nbtTagCompound;
     }
@@ -1303,11 +1329,11 @@ public class CitizenData implements ICitizenData
 
         if (nbtTagCompound.contains(TAG_SOUND_PROFILE))
         {
-            soundProfile = nbtTagCompound.getInt(TAG_SOUND_PROFILE);
+            voiceProfile = nbtTagCompound.getInt(TAG_SOUND_PROFILE);
         }
         else
         {
-            soundProfile = random.nextInt(NUM_SOUND_PROFILES);
+            voiceProfile = random.nextInt(NUM_SOUND_PROFILES);
         }
 
         lastPosition = BlockPosUtil.read(nbtTagCompound, TAG_POS);
@@ -1439,6 +1465,11 @@ public class CitizenData implements ICitizenData
         for (int i = 0; i < finPartQuestsNbt.size(); i++)
         {
             finishedQuestParticipation.add(new ResourceLocation(finPartQuestsNbt.getString(i)));
+        }
+
+        if (nbtTagCompound.contains(TAG_TEXTURE_UUID))
+        {
+            this.textureUUID = nbtTagCompound.getUUID(TAG_TEXTURE_UUID);
         }
     }
 
@@ -1688,6 +1719,11 @@ public class CitizenData implements ICitizenData
                 colony.getResearchManager().getResearchEffects().getEffectStrength(HEALTH_BOOST),
                 AttributeModifier.Operation.ADDITION);
             AttributeModifierUtils.addHealthModifier(citizen, healthModLevel);
+
+            if (getColony().getResearchManager().getResearchEffects().getEffectStrength(MORE_AIR) > 0)
+            {
+                ((EntityCitizen) citizen).setMaxAir(600);
+            }
         }
     }
 
@@ -1894,6 +1930,12 @@ public class CitizenData implements ICitizenData
     }
 
     @Override
+    public boolean hasQuestAssignment()
+    {
+        return !this.availableQuests.isEmpty() || !this.participatingQuests.isEmpty();
+    }
+
+    @Override
     public void onInteractionClosed(final Component key, final ServerPlayer sender)
     {
         final IInteractionResponseHandler chatOption = citizenChatOptions.get(key);
@@ -1908,8 +1950,26 @@ public class CitizenData implements ICitizenData
     {
         if (uuid == null)
         {
-            uuid = UUID.nameUUIDFromBytes((getId() + getColony().getID() + getColony().getDimension().location().toString()).getBytes());
+            uuid = UUID.nameUUIDFromBytes((getId() + ":" + getColony().getID() + ":" + getColony().getDimension().location().toString()).getBytes());
         }
         return uuid;
+    }
+
+    @Override
+    public void setCustomTexture(final UUID texture)
+    {
+        this.textureUUID = texture;
+    }
+
+    @Override
+    public boolean hasCustomTexture()
+    {
+        return textureUUID != null;
+    }
+
+    @Override
+    public UUID getCustomTexture()
+    {
+        return textureUUID;
     }
 }

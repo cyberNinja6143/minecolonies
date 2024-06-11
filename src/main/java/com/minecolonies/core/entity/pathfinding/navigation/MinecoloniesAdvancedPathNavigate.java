@@ -46,6 +46,7 @@ import static com.minecolonies.core.entity.pathfinding.pathjobs.AbstractPathJob.
 /**
  * Minecolonies async PathNavigate.
  */
+// TODO: Rework
 public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNavigate implements IDynamicHeuristicNavigator
 {
     private static final double ON_PATH_SPEED_MULTIPLIER = 1.3D;
@@ -176,6 +177,7 @@ public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNaviga
     public PathResult<AbstractPathJob> moveToRandomPosAroundX(final int range, final double speedFactor, final BlockPos pos)
     {
         if (pathResult != null
+              && pathResult.isInProgress()
               && pathResult.getJob() instanceof PathJobRandomPos
               && ((((PathJobRandomPos) pathResult.getJob()).posAndRangeMatch(range, pos))))
         {
@@ -205,7 +207,7 @@ public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNaviga
       final double speedFactor,
       final net.minecraft.util.Tuple<BlockPos, BlockPos> corners)
     {
-        if (pathResult != null && pathResult.getJob() instanceof PathJobRandomPos)
+        if (pathResult != null && pathResult.isInProgress() && pathResult.getJob() instanceof PathJobRandomPos)
         {
             return pathResult;
         }
@@ -658,9 +660,10 @@ public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNaviga
               .getNode(this.getPath()
                 .getNextNodeIndex() + 1) : null;
 
-
             final BlockPos pos = new BlockPos(pEx.x, pEx.y, pEx.z);
-            if (pEx.isOnLadder() && pExNext != null && (pEx.y != pExNext.y || mob.getY() > pEx.y) && level.getBlockState(pos).isLadder(level, pos, ourEntity))
+            if (pEx.isOnLadder() && pExNext != null && (pEx.y != pExNext.y || mob.getY() > pEx.y) && PathfindingUtils.isLadder(level.getBlockState(pos),
+              pathResult != null ? pathResult.getJob().getPathingOptions() : getPathingOptions())
+                  && level.getBlockState(pos).getFluidState().isEmpty())
             {
                 return handlePathPointOnLadder(pEx);
             }
@@ -867,7 +870,7 @@ public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNaviga
             }
             else
             {
-                if (level.getBlockState(entityPos.below()).isLadder(level, entityPos.below(), ourEntity))
+                if (PathfindingUtils.isLadder(level.getBlockState(entityPos.below()), getPathingOptions()))
                 {
                     this.ourEntity.setYya(-0.5f);
                 }
@@ -883,6 +886,11 @@ public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNaviga
 
     private boolean handleEntityInWater(int oldIndex, final PathPointExtended pEx)
     {
+        if (!ourEntity.getEyeInFluidType().isAir())
+        {
+            return false;
+        }
+
         //  Prevent shortcuts when swimming
         final int curIndex = this.getPath().getNextNodeIndex();
         if (curIndex > 0
@@ -1156,7 +1164,7 @@ public class MinecoloniesAdvancedPathNavigate extends AbstractAdvancedPathNaviga
     }
 
     @Override
-    protected void setPauseTicks(final int pauseTicks)
+    public void setPauseTicks(final int pauseTicks)
     {
         this.pauseTicks = pauseTicks;
     }

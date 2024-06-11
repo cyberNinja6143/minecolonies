@@ -751,6 +751,7 @@
   "item.minecolonies.spear": "Spear",
 
   "com.minecolonies.coremod.item.permissionscepter.setmode": "Set to mode %s.",
+  "com.minecolonies.coremod.item.permissionscepter.mode": "Tool Mode: %s",
   "com.minecolonies.coremod.item.permissionscepter.mode.block": "block",
   "com.minecolonies.coremod.item.permissionscepter.mode.location": "location",
   "com.minecolonies.coremod.item.permissionscepter.permission.deny": "You do not have permission to edit blocks with this tool!",
@@ -958,6 +959,11 @@
   "event.minecolonies.raidmessage_p3": "Arr Comrade! There's some darn pirates from the %s comin' for %s tonight! They sailed 'ere and will continue attacking until we destroy their caravel.",
   "event.minecolonies.raidmessage_p4": "A huge horde of pirates are sailin' %s of %s and they're not here to play! Their rigorous waves will hit us unless we destroy their galleon!",
 
+  "event.minecolonies.raidmessage_u1": "A mysterious sunken shipwreck has been been spotted to the %s of %s! It is a small sloop, you should consider destroying it.",
+  "event.minecolonies.raidmessage_u2": "Citizens report rumors of drowned pirates closing in %s of %s! There also seems to be a sunk ship there, better destroy it.",
+  "event.minecolonies.raidmessage_u3": "Arrglglglgl! There's some darn drowned pirates from the %s comin' for %s tonight! There is even a sunk ship 'ere and will continue attacking until we destroy their caravel.",
+  "event.minecolonies.raidmessage_u4": "A huge horde of drowned pirates are swimming' %s of %s and they're not here to play! Their rigorous waves will hit us unless we destroy their sunken galleon!",
+
   "com.minecolonies.coremod.raid.amazon.name": "Amazons",
   "com.minecolonies.coremod.raid.egyptian.name": "Mummies",
   "com.minecolonies.coremod.raid.barbarian.name": "Barbarians",
@@ -1088,6 +1094,8 @@
   "item.minecolonies.mercegg": "Mercenary Spawn Egg",
 
   "com.minecolonies.coremod.pirates.sailing.away": "A pirate ship %s of %s just sailed away to search for another victim.",
+  "com.minecolonies.core.drowned_pirates.sailing.away": "The sunk shipwreck %s of %s mysteriously disappears back into the depths of the ocean.",
+
   "com.minecolonies.coremod.cook.serve.player": "%s: Here Governor, take this food!",
 
   "item.minecolonies.santa_hat": "Santa Hat",
@@ -1368,7 +1376,7 @@
   "com.minecolonies.gui.visiblestatus.digging": "Digging a grave",
   "com.minecolonies.gui.visiblestatus.burying": "Burying a citizen",
 
-  "entity.fisherman.messagewatertoofar": "My hut seems to be too far away from water, and I can't find any water to fish in! It should be an area of at least 7x7 blocks, and the same height as my hut.",
+  "entity.fisherman.messagewatertoofar": "I can't find any suitable water for fishing! There should be an area of water at least 7 blocks long and wide, and 2 blocks deep nearby.",
   "com.minecolonies.coremod.furnaceuser.nofuel": "Please tell me what kind of fuel I should use in my furnace!",
   "com.minecolonies.coremod.furnaceuser.noore": "Please tell me what kind of ore I should smelt in my furnace!",
   "com.minecolonies.coremod.furnaceuser.nofood": "Please tell me what kind of food I should hand out!",
@@ -2137,6 +2145,7 @@
   "com.minecolonies.coremod.gui.townhall.picktexturestyle": "Citizen Style:",
   "com.minecolonies.coremod.gui.townhall.picknamestyle": "Name Pack:",
   "com.minecolonies.core.townhall.patreon": "Feature Limited to Contributors and Donors",
+  "com.minecolonies.core.townhall.patreon.needs_owner": "Need to be Colony Owner to adjust this Feature",
   "com.minecolonies.coremod.gui.chat.drcat": "Miau, mew, mau, meee, mew, hiss, nyan, mew!!! brrrrrrrrrbrrrrrrbrrrrr",
   "com.minecolonies.coremod.gui.chat.arston": "I am Arston, former military advisor and general of the draconian army. I can offer my expertise to run and strengthen your army",
   "com.minecolonies.coremod.gui.chat.kedamono": "I am the Kedamono Dragon, I have traveled far and seek a fair place to reside. Do you have enough beds for me?",
@@ -2160,6 +2169,7 @@
   "com.minecolonies.coremod.gui.chat.cammy": "I am an elven brewmaster from the fallen Silverleaf Realm, roaming MineColonies offering exotic brews, seeking allies to reclaim his homeland's lost magic and glory",
   "com.minecolonies.coremod.gui.chat.duran": "Hi! I'm not sure how I got here.....BUT HECC YOU IM STAYIN!",
   "com.minecolonies.coremod.gui.chat.sheizen": "Hi there! I'm an explorer who goes by the name Reizar. There is something interesting about this place, and I'd like to be a part of it.",
+  "com.minecolonies.coremod.gui.chat.andromeda": "We have come on our journey to visit all the corners of the universe. However, this seems like a nice place to rest for a couple moments. Prepared to provide research related services in payment for exotic minerals.",
   "com.minecolonies.job.builder": "Builder",
   "com.minecolonies.job.deliveryman": "Courier",
   "com.minecolonies.job.miner": "Miner",
@@ -2573,5 +2583,13 @@
   "com.minecolonies.core.gui.supplies.guide": "Use these supplies to assemble a %s to serve as a foundation for your own colony. Within it, aside from §2ample resources§r, you shall find\na salvaged §2townhall block§r and §2build tool§r to lay the groundworks of the new colony. Founding a colony demands resilience; beyond the basic necessities of shelter, sustenance, and healing, lies the imperative to fortify against the looming threats of piracy and barbarism. Yet, should you endure these trials, the potential for growth knows no bounds. From artisans to scholars, miners to alchemists, your settlement holds the promise of evolving into a §2self-sustaining bastion of prosperity and knowledge§r.",
 
   "com.minecolonies.core.gui.supplycamp.guide": "Make sure to find a flat, open area large enough for the camp's layout to place it.",
-  "com.minecolonies.core.gui.supplyship.guide": "Make sure to place it in open waters spacious enough to accommodate the ship's size."
+  "com.minecolonies.core.gui.supplyship.guide": "Make sure to place it in open waters spacious enough to accommodate the ship's size.",
+  "entity.minecolonies.drownedpirate": "Drowned Pirate",
+  "death.attack.entity.minecolonies.drownedpirate": "%s was taken to the depths by a drowned Pirate",
+  "entity.minecolonies.drownedarcherpirate": "Drowned Pirate Archer",
+  "death.attack.entity.minecolonies.drownedarcherpirate": "%s was pierced from the depths by a drowned Pirate Archer",
+  "entity.minecolonies.drownedchiefpirate": "Drowned Pirate Chief",
+  "death.attack.entity.minecolonies.drownedchiefpirate": "%s was put to a watery grave by a drowned Pirate Chief",
+  "com.minecolonies.core.exit_interactions": "Exit Interactions",
+  "com.minecolonies.core.raidevent.spawnerbreaks": "One of the spawners of the raid misteriously broke, it seems you hit some sort of limit"
 }

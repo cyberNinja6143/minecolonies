@@ -10,6 +10,7 @@ import com.minecolonies.api.colony.permissions.Action;
 import com.minecolonies.api.entity.ModEntities;
 import com.minecolonies.api.entity.ai.statemachine.tickratestatemachine.TickRateStateMachine;
 import com.minecolonies.api.entity.citizen.AbstractEntityCitizen;
+import com.minecolonies.api.entity.other.AbstractFastMinecoloniesEntity;
 import com.minecolonies.api.items.ModTags;
 import com.minecolonies.api.util.*;
 import com.minecolonies.api.util.constant.Constants;
@@ -20,7 +21,7 @@ import com.minecolonies.core.blocks.huts.BlockHutTownHall;
 import com.minecolonies.core.client.render.RenderBipedCitizen;
 import com.minecolonies.core.colony.ColonyManager;
 import com.minecolonies.core.colony.buildings.modules.TavernBuildingModule;
-import com.minecolonies.core.colony.colonyEvents.citizenEvents.VisitorSpawnedEvent;
+import com.minecolonies.core.colony.eventhooks.citizenEvents.VisitorSpawnedEvent;
 import com.minecolonies.core.colony.interactionhandling.RecruitmentInteraction;
 import com.minecolonies.core.colony.jobs.AbstractJobGuard;
 import com.minecolonies.core.colony.jobs.JobFarmer;
@@ -114,7 +115,7 @@ public class EventHandler
      *
      * @param event the event.
      */
-    @SubscribeEvent
+    @SubscribeEvent(priority = HIGHEST)
     public static void onEntityAdded(@NotNull final EntityJoinLevelEvent event)
     {
         if (!event.getLevel().isClientSide())
@@ -123,8 +124,14 @@ public class EventHandler
               .getType()
               .is(ModTags.mobAttackBlacklist)))
             {
-                ((Mob) event.getEntity()).targetSelector.addGoal(6, new NearestAttackableTargetGoal<>((Mob) event.getEntity(), EntityCitizen.class, true, citizen -> !citizen.isInvisible()));
+                ((Mob) event.getEntity()).targetSelector.addGoal(6,
+                  new NearestAttackableTargetGoal<>((Mob) event.getEntity(), EntityCitizen.class, true, citizen -> !citizen.isInvisible()));
                 ((Mob) event.getEntity()).targetSelector.addGoal(7, new NearestAttackableTargetGoal<>((Mob) event.getEntity(), EntityMercenary.class, true));
+            }
+
+            if (event.getEntity() instanceof AbstractFastMinecoloniesEntity && ((ServerLevel) event.getLevel()).getEntity(event.getEntity().getUUID()) != null)
+            {
+                event.setCanceled(true);
             }
         }
     }

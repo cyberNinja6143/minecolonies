@@ -14,6 +14,7 @@ import com.minecolonies.core.MineColonies;
 import com.minecolonies.core.Network;
 import com.minecolonies.core.blocks.BlockDecorationController;
 import com.minecolonies.core.entity.pathfinding.*;
+import com.minecolonies.core.entity.pathfinding.navigation.IDynamicHeuristicNavigator;
 import com.minecolonies.core.entity.pathfinding.pathresults.PathResult;
 import com.minecolonies.core.entity.pathfinding.world.CachingBlockLookup;
 import com.minecolonies.core.entity.pathfinding.world.ChunkCache;
@@ -164,8 +165,10 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
      * @param result path result.
      * @param entity the entity.
      */
-    public AbstractPathJob(final Level world, @NotNull final BlockPos start, final int range, final PathResult result, @Nullable final Mob entity)
+    public AbstractPathJob(final Level world, @NotNull final BlockPos start, int range, final PathResult result, @Nullable final Mob entity)
     {
+        range = Math.max(10, range);
+
         // 30% Extra range to account for heuristics/cost based less circular exploring
         final int minX = (int) (start.getX() - range * 1.3);
         final int minZ = (int) (start.getZ() - range * 1.3);
@@ -188,6 +191,31 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
         {
             initDebug();
         }
+    }
+
+    /**
+     * Internal constructor, for secondary pathjobs within another one
+     *
+     * @param chunkCache
+     * @param start
+     * @param range
+     * @param result
+     * @param entity
+     */
+    protected AbstractPathJob(final LevelReader chunkCache, @NotNull final BlockPos start, int range, final PathResult result, @Nullable final Mob entity)
+    {
+        range = Math.max(10, range);
+        this.maxNodes = Math.min(MAX_NODES, range * range);
+        nodesToVisit = new PriorityQueue<>(range * 2);
+        this.start = new BlockPos(start);
+
+        world = chunkCache;
+        cachedBlockLookup = new CachingBlockLookup(start, this.world);
+
+        this.result = result;
+        result.setJob(this);
+
+        this.entity = entity;
     }
 
     /**
@@ -265,7 +293,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
         {
             startNode.setLadder();
         }
-        else if (PathfindingUtils.isLiquid(cachedBlockLookup.getBlockState(start.below())))
+        else if (!pathingOptions.canWalkUnderWater() && PathfindingUtils.isLiquid(cachedBlockLookup.getBlockState(start.below())))
         {
             startNode.setSwimming();
         }
@@ -291,8 +319,6 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
     {
         MNode bestNode = getAndSetupStartNode();
         double bestNodeEndScore = getEndNodeScore(bestNode);
-        // breakpoint at which we start scoring potential ending points
-        double heuristicEndNodeCutoff = startNode.getHeuristic() > 0 ? startNode.getHeuristic() / 3 : 200;
         // Node count since we found a better end node than the current one
         int nodesSinceEndNode = 0;
 
@@ -325,9 +351,8 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
                 handleDebugPathReach(bestNode);
 
                 reachesDestination = true;
-                if (reevaluteHeuristic(bestNode, reachesDestination))
+                if (reevaluteHeuristic(bestNode, true))
                 {
-                    heuristicEndNodeCutoff = startNode.getHeuristic() > 0 ? startNode.getHeuristic() / 3 : 200;
                     recalcHeuristic(bestNode);
                 }
                 else
@@ -341,7 +366,6 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
             {
                 if (reevaluteHeuristic(bestNode, reachesDestination))
                 {
-                    heuristicEndNodeCutoff = startNode.getHeuristic() > 0 ? startNode.getHeuristic() / 3 : 200;
                     recalcHeuristic(bestNode);
                     recalcHeuristic(node);
                 }
@@ -349,34 +373,24 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
 
             if (!node.isVisited() && !node.isCornerNode())
             {
-                if (node.getHeuristic() < heuristicEndNodeCutoff || totalNodesVisited > maxNodes * 0.7)
+                // Calculates a score for a possible end node, defaults to heuristic(closest)
+                final double nodeEndSCore = getEndNodeScore(node);
+                if (nodeEndSCore < bestNodeEndScore)
                 {
-                    // Calculates a score for a possible end node, defaults to heuristic(closest)
-                    final double nodeEndSCore = getEndNodeScore(node);
-                    if (nodeEndSCore < bestNodeEndScore)
+                    if (!reachesDestination || isAtDestination(node))
                     {
-                        if (!reachesDestination || isAtDestination(node))
-                        {
-                            nodesSinceEndNode = 0;
-                            bestNode = node;
-                            bestNodeEndScore = nodeEndSCore;
-                        }
+                        nodesSinceEndNode = 0;
+                        bestNode = node;
+                        bestNodeEndScore = nodeEndSCore;
                     }
-                }
-                else if (node.getHeuristic() < bestNode.getHeuristic())
-                {
-                    nodesSinceEndNode = 0;
-                    bestNode = node;
-                    bestNodeEndScore = node.getHeuristic();
                 }
             }
 
             // Don't keep searching more costly nodes when there is a destination
-            if (!node.isVisited() && reachesDestination && node.getScore() > bestNode.getScore() + 2)
+            if (!node.isVisited() && reachesDestination && node.getScore() > bestNode.getScore())
             {
                 if (reevaluteHeuristic(bestNode, reachesDestination))
                 {
-                    heuristicEndNodeCutoff = startNode.getHeuristic() > 0 ? startNode.getHeuristic() / 3 : 200;
                     recalcHeuristic(bestNode);
                     recalcHeuristic(node);
                 }
@@ -478,10 +492,28 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
      */
     private boolean reevaluteHeuristic(final MNode node, final boolean reaches)
     {
-        double costPerEstimation = node.getCost() / Math.max(1, (startNode.getHeuristic() - node.getHeuristic()));
-        int count = 1;
+        double costPerEstimation = node.getCost() / Math.max(1, startNode.getHeuristic());
+
         if (!reaches)
         {
+            int count = 0;
+            costPerEstimation = 0;
+            // Assume linearity
+            double lowestAroundStart = Double.MAX_VALUE;
+            lowestAroundStart = Math.min(lowestAroundStart, computeHeuristic(startNode.x + 1, startNode.y, startNode.z) * heuristicMod);
+            lowestAroundStart = Math.min(lowestAroundStart, computeHeuristic(startNode.x - 1, startNode.y, startNode.z) * heuristicMod);
+            lowestAroundStart = Math.min(lowestAroundStart, computeHeuristic(startNode.x, startNode.y, startNode.z + 1) * heuristicMod);
+            lowestAroundStart = Math.min(lowestAroundStart, computeHeuristic(startNode.x, startNode.y, startNode.z - 1) * heuristicMod);
+            lowestAroundStart = Math.min(lowestAroundStart, computeHeuristic(startNode.x, startNode.y + 1, startNode.z) * heuristicMod);
+            lowestAroundStart = Math.min(lowestAroundStart, computeHeuristic(startNode.x, startNode.y - 1, startNode.z) * heuristicMod);
+
+            final double heuristicPerDist = startNode.getHeuristic() - lowestAroundStart;
+
+            if (heuristicPerDist <= 0)
+            {
+                return false;
+            }
+
             for (final MNode cur : nodesToVisit)
             {
                 if (cur.getHeuristic() >= startNode.getHeuristic() || cur.isVisited())
@@ -490,17 +522,21 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
                 }
 
                 count++;
-                costPerEstimation += cur.getCost() / (startNode.getHeuristic() - cur.getHeuristic());
-
+                costPerEstimation += cur.getCost() / (BlockPosUtil.distManhattan(cur.x, cur.y, cur.z, startNode.x, startNode.y, startNode.z) * heuristicPerDist);
 
                 if (count == 20)
                 {
                     break;
                 }
             }
-        }
 
-        costPerEstimation = costPerEstimation / count;
+            if (count == 0)
+            {
+                return false;
+            }
+
+            costPerEstimation = costPerEstimation / count;
+        }
 
         if (costPerEstimation <= 0.0)
         {
@@ -512,6 +548,18 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
         {
             // Overshoot a bit
             costPerEstimation *= costPerEstimation < 1 ? 0.9 : 1.1;
+
+            if (reaches && entity != null && entity.getNavigation() instanceof IDynamicHeuristicNavigator navigator)
+            {
+                double foundPathCostPerDist = node.getCost() / Math.max(1, BlockPosUtil.distManhattan(start, node.x, node.y, node.z));
+
+                // If the path we found is per block more expensive than the entities historic we explore more for a potential cheaper path
+                if (foundPathCostPerDist > navigator.getAvgHeuristicModifier())
+                {
+                    double modifier = Math.min(0.8, Math.max(0.3, navigator.getAvgHeuristicModifier() / foundPathCostPerDist));
+                    costPerEstimation *= modifier;
+                }
+            }
 
             // Fix up existing heuristic values
             final List<MNode> nodes = new ArrayList<>(nodesToVisit);
@@ -693,8 +741,9 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
 
         final boolean swimStart = isSwimming && !node.isSwimming();
         final BlockState state = cachedBlockLookup.getBlockState(nextX, nextY, nextZ);
-        final boolean onRoad = WorkerUtil.isPathBlock(cachedBlockLookup.getBlockState(nextX, nextY - 1, nextZ).getBlock());
-        final boolean onRails = pathingOptions.canUseRails() && cachedBlockLookup.getBlockState(nextX, corner ? nextY - 1 : nextY, nextZ).getBlock() instanceof BaseRailBlock;
+        final BlockState belowState = cachedBlockLookup.getBlockState(nextX, nextY - 1, nextZ);
+        final boolean onRoad = WorkerUtil.isPathBlock(belowState.getBlock());
+        final boolean onRails = pathingOptions.canUseRails() && (corner ? belowState : state).getBlock() instanceof BaseRailBlock;
         final boolean railsExit = !onRails && node != null && node.isOnRails();
         final boolean ladder = PathfindingUtils.isLadder(state, pathingOptions);
 
@@ -711,8 +760,8 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
                 costFrom = node.parent;
             }
 
-            nextCost = computeCost(costFrom, dX, dY, dZ, isSwimming, onRoad, onRails, railsExit, swimStart, ladder, state, nextX, nextY, nextZ);
-            nextCost = modifyCost(nextCost, costFrom, swimStart, isSwimming, nextX, nextY, nextZ, state);
+            nextCost = computeCost(costFrom, dX, dY, dZ, isSwimming, onRoad, onRails, railsExit, swimStart, ladder, state, belowState, nextX, nextY, nextZ);
+            nextCost = modifyCost(nextCost, costFrom, swimStart, isSwimming, nextX, nextY, nextZ, state, belowState);
 
             if (nextCost > maxCost)
             {
@@ -828,6 +877,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
      * @param onRails    checks if the node is a rail block.
      * @param railsExit  the exit of the rails.
      * @param swimStart  if its the swim start.
+     * @param blockState
      * @return cost to move from the parent to the new position.
      */
     protected double computeCost(
@@ -838,7 +888,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
       final boolean railsExit,
       final boolean swimStart,
       final boolean ladder,
-      final BlockState state,
+      final BlockState state, final BlockState below,
       final int x, final int y, final int z)
     {
         double cost = 1;
@@ -862,7 +912,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
             cost += pathingOptions.caveAirCost;
         }
 
-        if (dY != 0 && !(ladder && parent.isLadder()) && !(Math.abs(dY) == 1 && cachedBlockLookup.getBlockState(x, y - 1, z).is(BlockTags.STAIRS)))
+        if (dY != 0 && !(ladder && parent.isLadder()) && !(Math.abs(dY) == 1 && below.is(BlockTags.STAIRS)))
         {
             if (dY > 0)
             {
@@ -883,7 +933,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
             cost += pathingOptions.walkInShapesCost;
         }
 
-        if (state.getBlock() instanceof ShingleBlock || state.getBlock() instanceof ShingleSlabBlock)
+        if (below.getBlock() instanceof ShingleBlock || below.getBlock() instanceof ShingleSlabBlock)
         {
             cost += 3;
         }
@@ -920,6 +970,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
      * @param parent
      * @param swimstart
      * @param swimming
+     * @param blockState
      * @param state
      * @return
      */
@@ -931,7 +982,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
       final int x,
       final int y,
       final int z,
-      final BlockState state)
+      final BlockState state, final BlockState below)
     {
         return cost;
     }
@@ -1049,7 +1100,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
      */
     protected int getGroundHeight(final MNode node, final int x, final int y, final int z)
     {
-        if (PathfindingUtils.isLiquid(cachedBlockLookup.getBlockState(x, y + 1, z)))
+        if (!pathingOptions.canWalkUnderWater() && PathfindingUtils.isLiquid(cachedBlockLookup.getBlockState(x, y + 1, z)))
         {
             return -100;
         }
@@ -1122,7 +1173,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
 
         if (parent != null)
         {
-            final BlockState hereState = cachedBlockLookup.getBlockState(x, y - 1, z);
+            final BlockState belowState = cachedBlockLookup.getBlockState(x, y - 1, z);
             final VoxelShape bb2 = cachedBlockLookup.getBlockState(x, y + 1, z).getCollisionShape(world, tempWorldPos.set(x, y + 1, z));
             final VoxelShape bb = cachedBlockLookup.getBlockState(x, y, z).getCollisionShape(world, tempWorldPos.set(x, y, z));
             if ((y + 1 + ShapeUtil.getStartY(bb2, 1)) - (y + ShapeUtil.getEndY(bb, 0)) >= 2)
@@ -1130,7 +1181,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
                 return false;
             }
 
-            return PathfindingUtils.isLiquid(hereState) && !isPassable(x, y, z, false, parent);
+            return parent.isSwimming() && PathfindingUtils.isLiquid(belowState) && !isPassable(x, y, z, false, parent);
         }
         return false;
     }
@@ -1349,7 +1400,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
     {
         final boolean isSwimming = parent != null && parent.isSwimming();
 
-        if (PathfindingUtils.isLiquid(below))
+        if (!pathingOptions.canWalkUnderWater() && PathfindingUtils.isLiquid(below))
         {
             return handleInLiquid(x, y, z, below, isSwimming);
         }
@@ -1387,7 +1438,7 @@ public abstract class AbstractPathJob implements Callable<Path>, IPathJob
             return -100;
         }
 
-        for (int i = 2; i <= 10; i++)
+        for (int i = 2; i <= (pathingOptions.canDrop ? 10 : 2); i++)
         {
             final BlockState below = cachedBlockLookup.getBlockState(x, y - i, z);
             if (SurfaceType.getSurfaceType(world, below, tempWorldPos.set(x, y - i, z), getPathingOptions()) == SurfaceType.WALKABLE)
